@@ -1,9 +1,10 @@
 ﻿using System.Text;
-using static TCCS.XACTHandlers.EndianReader;
+using TCCS.EndianUtils;
+using static TCCS.EndianUtils.EndianReader;
 
-namespace TCCS.XACTHandlers
+namespace TCCS.Handlers
 {
-	public class XSBHandler
+	public class XSBHandler : IDisposable
 	{
 		public struct SBNameTableEntry
 		{
@@ -16,32 +17,36 @@ namespace TCCS.XACTHandlers
 			}
 		}
 
-		private readonly Stream SBStream;
-
+		private readonly EndianReader Reader;
 		private static readonly byte[] LittleMagic = Encoding.ASCII.GetBytes("SDBK");
-		private static Endianness FileEndian = Endianness.Big;
+		private Endianness FileEndian;
 
-		public List<string> Songs = new();
+		public string[] Names = [];
 
-		public byte[] SBSignature { get; set; }
+		protected byte[] SBSignature { get; set; }
 
 		private int CueNamesTableOffset;
 		private uint CueSet1Count, CueSet2Count, CueNamesLen;
 
-		public XSBHandler(string Filename)
+		public XSBHandler(Stream FileStream)
 		{
-			SBStream = File.Open(Filename, FileMode.Open);
-			using EndianReader Reader = new(SBStream, Encoding.Default, false);
-			Read(Reader);
+			Reader = new EndianReader(FileStream);
+			FileEndian = Endianness.Little;
+			Read();
 		}
 
-		public void Read(EndianReader Reader)
+		public void Dispose() => Reader.Close();
+
+		private void Read()
 		{
 			SBSignature = Reader.ReadBytes(LittleMagic.Length);
 
-			if (SBSignature.SequenceEqual(LittleMagic))
+			if (!SBSignature.SequenceEqual(LittleMagic))
 			{
-				FileEndian = Endianness.Little;
+				byte[] SwappedSig = LittleMagic;
+				Array.Reverse(SwappedSig);
+				SBSignature = SwappedSig;
+				FileEndian = Endianness.Big;
 			}
 
 			Reader.ReadUInt16(FileEndian); // Version
@@ -62,26 +67,26 @@ namespace TCCS.XACTHandlers
 
 			CueNamesLen = Reader.ReadUInt32(FileEndian);
 
-			Reader.ReadInt32(FileEndian); // Cue Set 1 Offset
-			Reader.ReadInt32(FileEndian); // Cue Set 2 Offset
-			Reader.ReadInt32(FileEndian); // Cue Names Offset
+			Reader.ReadInt32(FileEndian); // Cue Set 1 DataOffset
+			Reader.ReadInt32(FileEndian); // Cue Set 2 DataOffset
+			Reader.ReadInt32(FileEndian); // Cue Names DataOffset
 			Reader.ReadInt32(FileEndian); // Unknown
 			Reader.ReadInt32(FileEndian); // Unknown
 
 			Reader.ReadInt32(FileEndian); // Unknown
-			Reader.ReadInt32(FileEndian); // Wave Bank Offset
-			Reader.ReadInt32(FileEndian); // Cue Name Hash Offset
+			Reader.ReadInt32(FileEndian); // Wave Bank DataOffset
+			Reader.ReadInt32(FileEndian); // Cue Name Hash DataOffset
 			CueNamesTableOffset = Reader.ReadInt32(FileEndian);
-			Reader.ReadInt32(FileEndian); // Sounds Offset
+			Reader.ReadInt32(FileEndian); // Sounds DataOffset
 
 			Reader.ReadChars(64); // Sound Bank Name
 
-			// To-do: Something with the rest of this; right now we only extract the names.
+			// To-do: Something with the rest of this; right now we only extract the WaveNames.
 
 			if (CueNamesLen > 0 && CueNamesTableOffset > 0)
 			{
 				SBNameTableEntry[] CueNameEntries = new SBNameTableEntry[CueSet1Count + CueSet2Count];
-				string[] Names = new string[CueNameEntries.Length];
+				Names = new string[CueNameEntries.Length];
 				Reader.BaseStream.Seek(CueNamesTableOffset, SeekOrigin.Begin);
 				for (int i = 0; i < CueSet1Count + CueSet2Count; i++)
 				{
@@ -91,7 +96,7 @@ namespace TCCS.XACTHandlers
 
 				for (int j = 0; j < CueSet1Count + CueSet2Count; j++)
 				{
-					List<char> Characters = new();
+					List<char> Characters = [];
 					Reader.BaseStream.Seek(CueNameEntries[j].NameOffset, SeekOrigin.Begin);
 					while (Reader.PeekChar() >= 0)
 					{
@@ -107,7 +112,6 @@ namespace TCCS.XACTHandlers
 						Characters.Add(Character);
 					}
 				}
-				Songs = Names.ToList();
 			}
 		}
 	}

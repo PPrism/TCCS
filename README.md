@@ -9,6 +9,7 @@ Features include:
 * Adjusting or inserting assets for use with TerrariaOGC
 * \*Decompressing v1.01 assets made for the Xbox 360
 * \*Patching specific assets with xDelta3 automatically
+* Unpacking Old-Gen Console Terraria audio files and individually compressing them to MS-ADPCM format.
 
 
 *\* assuming the proper auxillary applications are available alongside TCCS*
@@ -23,7 +24,7 @@ Once you have a build of the program (made by yourself or downloaded from the 'R
 You will also need to ensure any required files are also present in that directory.
 
 ## How do I build it?
-If you don't wish to use the publish build provided for some reason, you can just use the solution in Visual Studio and build it with that. It has a build process that is trivial compared to TerrariaOGC.
+If you don't wish to use the published build provided for some reason, you can just download the repo, and use the solution in Visual Studio to build your own version. Unlike TerrariaOGC, no linking or external repo setup is required.
 
 ## Auxillary Files:
 In order for TerrariaOGC to be safe in a legal sense, I cannot provide a substantial part of the Terraria's original content, outside of a few resources, meaning TerrariaOGC depends on you having the original game made for the 'Old-Gen' console versions.
@@ -55,4 +56,4 @@ The supported applications which can be used by the TCCS and their function are 
   * This is needed if you have not already decompressed the files and are building versions 1.01, 1.03, or the final version of the game. TerrariaOGC will be built with `VERSION_101`, `VERSION_103`, or `VERSION_FINAL` if this is the case.
   * If you want to do this manually, you can try to use [unxwb](https://github.com/mariodon/unxwb) to unpackage xWMA sound files.
 
-* You will also need any dependency files needed by these programs, which to my knowledge, are: `msvcp71.dll`, `msvcr71.dll`, and `xbdm.dll`.
+* You will also need any dependency files needed by these programs if they are used, which to my knowledge, are: `msvcp71.dll`, `msvcr71.dll`, and `xbdm.dll`.

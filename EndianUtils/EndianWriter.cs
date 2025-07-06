@@ -1,26 +1,26 @@
 ﻿using System.Buffers.Binary;
 using System.Text;
 
-namespace TCCS.XACTHandlers
+namespace TCCS.EndianUtils
 {
-    public class EndianWriter : BinaryWriter
-    {
-        public enum Endianness
-        {
-            Little,
-            Big,
-        }
+	public class EndianWriter : BinaryWriter
+	{
+		public enum Endianness
+		{
+			Little,
+			Big,
+		}
 
-        private readonly Endianness _Endian = Endianness.Little;
+		private readonly Endianness _Endian = Endianness.Little;
 
-        public EndianWriter() : base()
-        {
-        }
+		public EndianWriter() : base()
+		{
+		}
 
-        public EndianWriter(Endianness Endian) : base()
-        {
-            _Endian = Endian;
-        }
+		public EndianWriter(Endianness Endian) : base()
+		{
+			_Endian = Endian;
+		}
 
 		public EndianWriter(Stream Input) : base(Input)
 		{
@@ -68,20 +68,20 @@ namespace TCCS.XACTHandlers
 
 		public override void Write(short Value) => Write(Value, _Endian);
 
-        public void Write(short Value, Endianness Endian)
-        {
-            Span<byte> Buffer = stackalloc byte[sizeof(short)];
-            if (Endian == Endianness.Little)
-            {
-                BinaryPrimitives.WriteInt16LittleEndian(Buffer, Value);
-                OutStream.Write(Buffer);
-            }
-            else
-            {
-                BinaryPrimitives.WriteInt16BigEndian(Buffer, Value);
-                OutStream.Write(Buffer);
-            }
-        }
+		public void Write(short Value, Endianness Endian)
+		{
+			Span<byte> Buffer = stackalloc byte[sizeof(short)];
+			if (Endian == Endianness.Little)
+			{
+				BinaryPrimitives.WriteInt16LittleEndian(Buffer, Value);
+				OutStream.Write(Buffer);
+			}
+			else
+			{
+				BinaryPrimitives.WriteInt16BigEndian(Buffer, Value);
+				OutStream.Write(Buffer);
+			}
+		}
 
 		public override void Write(ushort Value) => Write(Value, _Endian);
 
@@ -152,19 +152,19 @@ namespace TCCS.XACTHandlers
 
 		public override void Write(ulong Value) => Write(Value, _Endian);
 
-        public void Write(ulong Value, Endianness Endian)
-        {
-            Span<byte> Buffer = stackalloc byte[sizeof(ulong)];
-            if (Endian == Endianness.Little)
-            {
-                BinaryPrimitives.WriteUInt64LittleEndian(Buffer, Value);
-                OutStream.Write(Buffer);
-            }
-            else
-            {
-                BinaryPrimitives.WriteUInt64BigEndian(Buffer, Value);
-                OutStream.Write(Buffer);
-            }
-        }
-    }
+		public void Write(ulong Value, Endianness Endian)
+		{
+			Span<byte> Buffer = stackalloc byte[sizeof(ulong)];
+			if (Endian == Endianness.Little)
+			{
+				BinaryPrimitives.WriteUInt64LittleEndian(Buffer, Value);
+				OutStream.Write(Buffer);
+			}
+			else
+			{
+				BinaryPrimitives.WriteUInt64BigEndian(Buffer, Value);
+				OutStream.Write(Buffer);
+			}
+		}
+	}
 }

@@ -1,20 +1,20 @@
 ﻿using System.Text;
 
-namespace TCCS.XACTHandlers
+namespace TCCS.EndianUtils
 {
-    public class EndianReader : BinaryReader
-    {
-        public enum Endianness
-        {
-            Little,
-            Big,
-        }
+	public class EndianReader : BinaryReader
+	{
+		public enum Endianness
+		{
+			Little,
+			Big,
+		}
 
-        private readonly Endianness _Endian = Endianness.Little;
+		private readonly Endianness _Endian = Endianness.Little;
 
-        public EndianReader(Stream Input) : base(Input) // Did up the rest of these and the writer; maybe someone will make use of these in another project.
-        {
-        }
+		public EndianReader(Stream Input) : base(Input) // Did up the rest of these and the writer; maybe someone will make use of these in another project.
+		{
+		}
 
 		public EndianReader(Stream Input, Endianness Endian) : base(Input)
 		{
@@ -22,8 +22,8 @@ namespace TCCS.XACTHandlers
 		}
 
 		public EndianReader(Stream Input, Encoding Type) : base(Input, Type)
-        {
-        }
+		{
+		}
 
 		public EndianReader(Stream Input, Encoding Type, Endianness Endian) : base(Input, Type)
 		{
@@ -31,17 +31,17 @@ namespace TCCS.XACTHandlers
 		}
 
 		public EndianReader(Stream Input, Encoding Type, bool LeaveOpen) : base(Input, Type, LeaveOpen)
-        {
-        }
+		{
+		}
 
-        public EndianReader(Stream Input, Encoding Type, bool LeaveOpen, Endianness Endian) : base(Input, Type, LeaveOpen)
-        {
-            _Endian = Endian;
-        }
+		public EndianReader(Stream Input, Encoding Type, bool LeaveOpen, Endianness Endian) : base(Input, Type, LeaveOpen)
+		{
+			_Endian = Endian;
+		}
 
-        public override float ReadSingle() => ReadSingle(_Endian); // Why did I have this here again?
+		public override float ReadSingle() => ReadSingle(_Endian); // Why did I have this here again?
 
-        public float ReadSingle(Endianness Endian) => BitConverter.ToSingle(EndianHandler(sizeof(float), Endian));
+		public float ReadSingle(Endianness Endian) => BitConverter.ToSingle(EndianHandler(sizeof(float), Endian));
 
 		public override short ReadInt16() => ReadInt16(_Endian);
 
@@ -67,16 +67,16 @@ namespace TCCS.XACTHandlers
 
 		public ulong ReadUInt64(Endianness Endian) => BitConverter.ToUInt64(EndianHandler(sizeof(ulong), Endian));
 
-        internal byte[] EndianHandler(int BytesToRead, Endianness Endian)
-        {
-            var Bytes = ReadBytes(BytesToRead);
+		internal byte[] EndianHandler(int BytesToRead, Endianness Endian)
+		{
+			var Bytes = ReadBytes(BytesToRead);
 
-            if ((Endian == Endianness.Little && !BitConverter.IsLittleEndian) || (Endian == Endianness.Big && BitConverter.IsLittleEndian))
-            {
-                Array.Reverse(Bytes);
-            }
+			if (Endian == Endianness.Little && !BitConverter.IsLittleEndian || Endian == Endianness.Big && BitConverter.IsLittleEndian)
+			{
+				Array.Reverse(Bytes);
+			}
 
-            return Bytes;
-        }
-    }
+			return Bytes;
+		}
+	}
 }

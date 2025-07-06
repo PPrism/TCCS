@@ -1,25 +1,51 @@
 ﻿using System.Diagnostics;
 using System.IO.Compression;
-using TCCS.XACTHandlers;
+using TCCS.EndianUtils;
+using TCCS.Handlers;
+using static TCCS.Handlers.XWBHandler;
 
 namespace TCCS
 {
 	class Program
-    {
-		private static readonly string[] CompressedTypes = new string[10]
-        {
-		    ".xpr",
-		    ".txt",
-		    ".str",
-		    ".ps",
-		    ".vs",
-		    ".xma",
-		    ".xsb",
-		    ".xgs",
-		    ".xwb",
-		    ".fnt"
-        };
+	{
+		public struct WBEntry
+		{
+			public string Name;
+			public byte[]? Dpds;
+			public byte[] Header, Data;
+			public uint[]? Seek;
+			public WaveFormat Format;
+			public MetaData Metadata;
 
+			internal WBEntry(WaveFormat EntryFormat, string EntryName, byte[] EntryHeader, MetaData EntryMeta, byte[] EntryData, byte[]? EntryDpds, uint[]? EntrySeek)
+			{
+				Format = EntryFormat;
+				Name = EntryName;
+				Header = EntryHeader;
+				Metadata = EntryMeta;
+				Data = EntryData;
+				Dpds = EntryDpds;
+				Seek = EntrySeek;
+			}
+		}
+
+		private static readonly string[] CompressedTypes =
+		[
+			".xpr",
+			".txt",
+			".str",
+			".ps",
+			".vs",
+			".xma",
+			".xsb",
+			".xgs",
+			".xwb",
+			".fnt"
+		];
+
+		internal static ushort BlockSetting { get; set; } = 128;
+		public static WBEntry[] Entries { get; set; } = [];
+		public static string[] SongNames { get; set; } = [];
 		private static IEnumerable<(int index, T value)> Enumerate<T>(IEnumerable<T> Collection) => Collection.Select((Index, Value) => (Value, Index));
 
 		private static void CopyDirectory(string SourcePath, string DestPath)
@@ -42,7 +68,7 @@ namespace TCCS
 		}
 
 		static void Main()
-        {
+		{
 			Console.WriteLine("Please ensure this tool is running in the same directory as Terraria's asset folder, which should be named 'Content', and the 'Prerequisites' folder.");
 			Console.WriteLine("Press any key to continue:");
 			Console.ReadKey();
@@ -153,25 +179,78 @@ namespace TCCS
 			if (VersionNum > 0)
 			{
 				Console.WriteLine("Content directories past the initial versions have compressed and encrypted data. This suite can handle them with the right tools.");
-				Console.WriteLine("Is your content directory already decompressed and decrypted?");
-				Console.WriteLine("Type 'Y' if no handling is needed, or type 'N' if you require the files to be worked on:");
+				Console.WriteLine("Does the content directory need decompression to get the raw assets?");
+				Console.WriteLine("Type 'Y' if you require decompression to raw formats or 'N' if no decompression is needed:");
 				ConsoleKeyInfo DontTouch = Console.ReadKey();
 
 				Console.WriteLine();
 
-				if (DontTouch.Key == ConsoleKey.Y)
+				if (DontTouch.Key == ConsoleKey.N)
 				{
 					Console.WriteLine("Attempting to continue; Let's begin conversion...");
 					Thread.Sleep(1000);
 					Console.Clear();
 				}
-				else if (DontTouch.Key == ConsoleKey.N)
+				else if (DontTouch.Key == ConsoleKey.Y)
 				{
 					if (File.Exists("xbdecompress.exe") && File.Exists("unbundler.exe") && File.Exists("xma2encode.exe") && File.Exists("xwmaencode.exe"))
 					{
 						Console.WriteLine("Required executables found; Let's begin conversion...");
 						Thread.Sleep(1000);
 						Console.Clear();
+
+						for (int FileIdx = 0; FileIdx < FileEntries.Length; FileIdx++)
+						{
+							FileInfo CurrentFile = new(FileEntries[FileIdx]);
+
+							if (CompressedTypes.Contains(CurrentFile.Extension))
+							{
+								Process Decompresser = new();
+								Decompresser.StartInfo.FileName = "xbdecompress.exe";
+								Decompresser.StartInfo.Arguments = string.Format("/Y {0} {1}", "\"" + CurrentFile.FullName + "\"", "\"" + CurrentFile.Directory + "\""); // We need the escaped quotes to support paths with spaces in them.
+								Decompresser.StartInfo.UseShellExecute = false;
+								Decompresser.StartInfo.RedirectStandardOutput = true;
+								Decompresser.Start();
+								Decompresser.WaitForExit();
+
+								if (CurrentFile.Extension == ".xpr")
+								{
+									try
+									{
+										Process Unbundler = new();
+										Unbundler.StartInfo.FileName = "unbundler.exe";
+										Unbundler.StartInfo.Arguments = "\"" + CurrentFile.FullName + "\"";
+										Unbundler.StartInfo.UseShellExecute = false;
+										Unbundler.StartInfo.RedirectStandardOutput = true;
+										Unbundler.Start();
+										Unbundler.WaitForExit();
+
+										string BasicName = Path.GetFileNameWithoutExtension(CurrentFile.FullName);
+										string Output = CurrentFile.FullName[..^3] + "tga";
+
+										File.Move(BasicName + ".tga", Output); // Unbundler does not allow for the output file to be sent to the source directory, so we need to move the .tga files from the .xpr files we have.
+										File.Delete(CurrentFile.FullName);
+									}
+									catch (FileNotFoundException) // There exist a couple of files that seem to be bundled incorrectly, so Unbundler cannot unpack a .tga file (or any file), leading to an exception; we need to continue regardless.
+									{
+										continue;
+									}
+								}
+
+								if (CurrentFile.Extension == ".xma")
+								{
+									string Output = CurrentFile.FullName[..^3] + "wav";
+									Process Converter = new();
+									Converter.StartInfo.FileName = "xma2encode.exe";
+									Converter.StartInfo.Arguments = string.Format("{0} /DecodeToPCM {1}", "\"" + CurrentFile.FullName + "\"", "\"" + Output + "\"");
+									Converter.StartInfo.UseShellExecute = false;
+									Converter.StartInfo.RedirectStandardOutput = true;
+									Converter.Start();
+									Converter.WaitForExit();
+									File.Delete(CurrentFile.FullName); // For the purpose of efficiency, I'm gonna delete every source file that can produce another one (e.g. no .xma if we got a .wav)
+								}
+							}
+						}
 					}
 					else
 					{
@@ -187,119 +266,121 @@ namespace TCCS
 					Console.WriteLine("Input read failed, closing...");
 					return;
 				}
-
-				if (DontTouch.Key == ConsoleKey.N)
-				{
-					for (int FileIdx = 0; FileIdx < FileEntries.Length; FileIdx++)
-					{
-						FileInfo CurrentFile = new(FileEntries[FileIdx]);
-
-						if (CompressedTypes.Contains(CurrentFile.Extension))
-						{
-							Process Decompresser = new();
-							Decompresser.StartInfo.FileName = "xbdecompress.exe";
-							Decompresser.StartInfo.Arguments = string.Format("/Y {0} {1}", "\"" + CurrentFile.FullName + "\"", "\"" + CurrentFile.Directory + "\""); // We need the escaped quotes to support paths with spaces in them.
-							Decompresser.StartInfo.UseShellExecute = false;
-							Decompresser.StartInfo.RedirectStandardOutput = true;
-							Decompresser.Start();
-							Decompresser.WaitForExit();
-
-							if (CurrentFile.Extension == ".xpr")
-							{
-								try
-								{
-									Process Unbundler = new();
-									Unbundler.StartInfo.FileName = "unbundler.exe";
-									Unbundler.StartInfo.Arguments = "\"" + CurrentFile.FullName + "\"";
-									Unbundler.StartInfo.UseShellExecute = false;
-									Unbundler.StartInfo.RedirectStandardOutput = true;
-									Unbundler.Start();
-									Unbundler.WaitForExit();
-
-									string BasicName = Path.GetFileNameWithoutExtension(CurrentFile.FullName);
-									string Output = CurrentFile.FullName[..^3] + "tga";
-
-									File.Move(BasicName + ".tga", Output); // Unbundler does not allow for the output file to be sent to the source directory, so we need to move the .tga files from the .xpr files we have.
-									File.Delete(CurrentFile.FullName);
-								}
-								catch (FileNotFoundException) // There exist a couple of files that seem to be bundled incorrectly, so Unbundler cannot unpack a .tga file (or any file), leading to an exception; we need to continue regardless.
-								{
-									continue;
-								}
-							}
-
-							if (CurrentFile.Extension == ".xma")
-							{
-								string Output = CurrentFile.FullName[..^3] + "wav";
-								Process Converter = new();
-								Converter.StartInfo.FileName = "xma2encode.exe";
-								Converter.StartInfo.Arguments = string.Format("{0} /DecodeToPCM {1}", "\"" + CurrentFile.FullName + "\"", "\"" + Output + "\"");
-								Converter.StartInfo.UseShellExecute = false;
-								Converter.StartInfo.RedirectStandardOutput = true;
-								Converter.Start();
-								Converter.WaitForExit();
-								File.Delete(CurrentFile.FullName); // For the purpose of efficiency, I'm gonna delete every source file that can produce another one (e.g. no .xma if we got a .wav)
-							}
-						}
-					}
-				}
 			}
 
-			string[] SongNames = Array.Empty<string>();
+			Console.WriteLine("Checking for required music files...");
+
 			DirectoryInfo RunDirectory = new(Environment.CurrentDirectory);
 			string TotalDirectory = RunDirectory.FullName;
+			byte Found = 0;
 			for (int FileIdx = 0; FileIdx < FileEntries.Length; FileIdx++)
 			{
 				FileInfo CurrentFile = new(FileEntries[FileIdx]);
-				string FullFileName = CurrentFile.FullName;
-				string RelativePath = FullFileName[(TotalDirectory.Length + 1)..];
+				string RelativePath = CurrentFile.FullName[(TotalDirectory.Length + 1)..];
 
-				if (CurrentFile.Extension == ".xgs")
+				if (CurrentFile.Extension == ".xsb")
 				{
-					_ = new XGSHandler(RelativePath, ContentPath + @"\Temp.xgs");
-					File.Move(FullFileName, FullFileName + ".bak");
-					File.Move(ContentPath + @"\Temp.xgs", FullFileName);
+					using var SoundsFile = new FileStream(RelativePath, FileMode.Open, FileAccess.Read);
+					using var Reader = new XSBHandler(SoundsFile);
+					SongNames = [.. Reader.Names]; // The soundbanks contain the WaveNames of each song.
+					SoundsFile.Close();
+					Found++;
 				}
 
-				if (CurrentFile.Extension == ".xsb") // For Terraria, the Wave bank will be decompressed and loaded AFTER the sound bank has been decompressed...
+				if (CurrentFile.Extension == ".xwb")
 				{
-					XSBHandler SoundBank = new(RelativePath);
-					SongNames = SoundBank.Songs.ToArray(); // The soundbanks contain the names of each song, so when you recreate the wavebank, you know what is what.
-				}
+					using var MusicStream = new FileStream(RelativePath, FileMode.Open, FileAccess.Read);
 
-				if (CurrentFile.Extension == ".xwb") // ..so no issues will be created doing it this way.
-				{	
-					XWBHandler WaveBank = new(RelativePath);
-					Console.WriteLine("Writing music files...");
-
-					foreach (var (Index, Entry) in Enumerate(WaveBank.Entries))
+					using (var Reader = new XWBHandler(MusicStream))
 					{
-						WaveWriter WaveWriter = new(Entry, EndianReader.Endianness.Little);
-						if (SongNames.Length == 0)
+						Entries = new WBEntry[Reader.Count];
+						for (uint SongID = 0; SongID < Reader.Count; SongID++)
 						{
-							WaveWriter.Write(Index, "Unknown", CurrentFile.DirectoryName); // If for some ungodly reason the soundbank does not have the names, you'll still have the placement index.
-						}
-						else
-						{
-							WaveWriter.Write(Index, SongNames[Index], CurrentFile.DirectoryName);
+							WaveFormat Format = Reader.GetWaveFormat(SongID);
+							MemoryStream EntryHeaderStream = new();
+							EndianWriter HeaderWriter = new(EntryHeaderStream, EndianWriter.Endianness.Little);
+
+							HeaderWriter.Write((ushort)Format.Encoding);
+							HeaderWriter.Write((ushort)Format.Channels);
+							HeaderWriter.Write(Format.SampleRate);
+							HeaderWriter.Write(Format.AvgBytesPerSecond);
+							HeaderWriter.Write((ushort)Format.BlockAlignment);
+							HeaderWriter.Write((ushort)Format.BitDepth);
+							HeaderWriter.Write((ushort)Format.ExtraSize.Length);
+
+							byte[] EntryArray = EntryHeaderStream.ToArray();
+							byte[] EntryHeader = new byte[EntryArray.Length + Format.ExtraSize.Length];
+							Buffer.BlockCopy(EntryArray, 0, EntryHeader, 0, EntryArray.Length);
+							Buffer.BlockCopy(Format.ExtraSize, 0, EntryHeader, EntryArray.Length, Format.ExtraSize.Length);
+
+							Entries[SongID].Header = EntryHeader;
+							Entries[SongID].Format = Format;
+							Entries[SongID].Name = Reader.GetName(SongID); // Unused here, but it remains for clarity.
+							Entries[SongID].Metadata = Reader.GetMetadata(SongID);
+							Entries[SongID].Dpds = Reader.GetDpds(SongID);
+
+							uint[] Seeks = [];
+							if (Entries[SongID].Format.Encoding >= EncodingType.WMAudio2 && Entries[SongID].Format.Encoding <= EncodingType.XMA2) // WMA2/3 & XMA1/2
+							{
+								Seeks = Reader.GetSeekTable(SongID);
+							}
+							Entries[SongID].Seek = Seeks;
+
+							Entries[SongID].Data = Reader.GetWaveData(SongID);
 						}
 					}
+					MusicStream.Close();
+					Found++;
 				}
 			}
 
-			Console.WriteLine("Wave bank successfully split; you will now need to convert these music files into an ADPCM XNA wave bank.");
-			Console.WriteLine("For this, a tool like QuickWaveBank by Trigger is recommended. Make sure the files are inserted in order and the resulting wave bank is formatted as ADPCM.");
-			Console.WriteLine("Press any key to continue:");
-			Console.ReadKey();
-
-			if (VersionNum == 2)
+			if (Found == 2)
 			{
-				File.Move(ContentPath + @"\Music\Wave Bank.xwb", ContentPath + @"\Music\Wave Bank.xwb.bak");
+
+				Console.WriteLine("What would you like the block alignment to be set at? (Default: 128)");
+				Console.WriteLine("Please select your option below:");
+				int MinBlock = 32;
+				for (int i = 1; MinBlock <= 1024; i++, MinBlock *= 2)
+				{
+					Console.WriteLine($"{i}) {MinBlock}");
+				}
+
+				BlockSetting = (ushort)Console.ReadKey().Key;
+				if (BlockSetting >= ((byte)ConsoleKey.D1) && ((byte)ConsoleKey.D6) <= 54)
+				{
+					BlockSetting -= (byte)ConsoleKey.D1; // For the below equation, we get a number between 0 and 5.
+					BlockSetting = (ushort)Math.Pow(2, BlockSetting + 5); // Gets us 32, 64, 128, 256, 512, or 1024.
+				}
+				else
+				{
+					BlockSetting = 128;
+				}
+
+				Console.WriteLine();
+				Console.WriteLine("Extracting music...");
+				Directory.CreateDirectory(ContentPath + @"\ExtMusic");
+				foreach (var (Index, Entry) in Enumerate(Entries))
+				{
+					WaveWriter WaveWriter = new(Entry.Format,
+						Entry.Name,
+						Entry.Header,
+						Entry.Metadata,
+						Entry.Data,
+						Entry.Dpds,
+						Entry.Seek,
+						EndianReader.Endianness.Little);
+					WaveWriter.Write(SongNames[Index], ContentPath + @"\ExtMusic");
+				}
 			}
 			else
 			{
-				File.Move(ContentPath + @"\Wave Bank.xwb", ContentPath + @"\Wave Bank.xwb.bak");
+				Console.WriteLine("Music files are either missing or in excess. Ensure only 1 .xwb and .xsb are present inside of the content directory.");
+				return;
 			}
+
+			Console.WriteLine("Wave bank successfully split and converted to ADPCM Format.");
+			Console.WriteLine("Press any key to continue:");
+			Console.ReadKey();
 
 			Console.Clear();
 
@@ -316,5 +397,5 @@ namespace TCCS
 			Console.WriteLine("Content folder setup completed successfully.");
 			return;
 		}
-    }
+	}
 }
